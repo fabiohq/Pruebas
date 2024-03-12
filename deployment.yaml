@@ -1,0 +1,99 @@
+apiVersion: &apiVersion& # for versions before 1.9.0 use apps/v1beta2
+kind: Deployment
+metadata:
+  namespace: antifraude
+  name: ms-motorreglas-log
+spec:
+  selector:
+    matchLabels:
+      app: ms-motorreglas-log
+  replicas: &replicas& # numero de replicas a crear para la aplicacion
+  template:
+    metadata:
+      labels:
+        app: ms-motorreglas-log
+    spec:
+      serviceAccountName: motor-reglas-sa # esta cuenta de servicio se debe crear para cada namespace con 3htp
+      containers:
+        #este nombre debe ser igual al nombre indicado arriba en la metadata
+        - name: ms-motorreglas-log
+          #change for image to deploy
+          image: &imagen_ecr_motorreglas_log&:&version_image&
+          env:
+            - name: TZ
+              value: America/Bogota
+            - name: LANG
+              value: C.UTF-8
+            #- name: JAVA_OPTS
+             # value: "JAVA_OPTS&"
+          #variables para agente APM
+           # OTEL_VARIABLES_NOTIFIER&
+          ports:
+          #8090
+            - containerPort: &containerPort&
+              protocol: TCP
+          # especificar los recursos de CPU y Memoria requeridos
+          # Backend : CPU Request: 100m, Limit: 300m - Memory Request: 512Mi, Memory Limit: 1536Mi
+          # Frontend: CPU Request: 10m,  Limit: 50m -  Memory Request: 128Mi, Memory Limit: 256Mi
+          # exemplo Frontned:
+          resources:
+            limits:
+            #min 100 Max 300
+              cpu: &resources_limits_cpu&
+            #min 300 max 512
+              memory: &resources_limits_memory&
+            requests:
+            #min 100 Max 300
+              cpu: &resources_requests_cpu&
+            #min 300 max 512
+              memory: &resources_requests_memory&                        
+          securityContext:
+            capabilities:
+              drop:
+              - NET_RAW
+          #Montaje de los volumenes para usar los archivos definidos en el configmap
+          volumeMounts:
+            - name: conf-volumen
+              mountPath: /app/config/application.yml
+              subPath: application.yml
+          #Montaje de volumen para configurar timezone
+            - name: conf-timezone-volumen
+              mountPath: /etc/localtime
+          #Volumenes para Agente APM
+            #- name: OTEL_EFS&
+            #  mountPath: OTEL_MOUNTPATH&
+            #  subPath: OTEL_SUBPATH&
+          #prueba para verificar que port de servicio este disponible antes de dejar en status READY el POD
+          # #docs https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+          readinessProbe:
+            failureThreshold: &readinessProbe_failureThreshold&
+            initialDelaySeconds: &readinessProbe_initialDelaySeconds&
+            periodSeconds: &readinessProbe_periodSeconds&
+            successThreshold: 1
+            tcpSocket:
+              port: &containerPort&
+            timeoutSeconds: 1
+          #prueba para verificar que port de servicio este disponible cada cierto tiempo
+          livenessProbe:
+            failureThreshold: &livenessProbe_failureThreshold&
+            initialDelaySeconds: &livenessProbe_initialDelaySeconds&
+            periodSeconds: &livenessProbe_periodSeconds&
+            successThreshold: 1
+            tcpSocket:
+              port: &containerPort&
+            timeoutSeconds: 1
+      dnsPolicy: &dnsPolicy&
+      # Montaje de los archivos de configuracion indicados en 'configsecret.yml'
+      volumes:
+      #PVC para agente APM
+       # - name: efs-volume
+       #   persistentVolumeClaim:
+        #    claimName: OTEL_CLAIMNAME&
+        - name: conf-volumen
+          secret:
+            secretName: motor-reglas-config
+      # Montaje de los archivos de configuración de timezone desde el host (worker node)
+        - name: conf-timezone-volumen
+          hostPath:
+              path: /usr/share/zoneinfo/America/Bogota
+
